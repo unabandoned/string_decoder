@@ -1,0 +1,26 @@
+schema: 1
+
+package: "@unabandoned/string_decoder"
+
+upstream:
+  repo: nodejs/string_decoder
+  reason: "frozen since 2019 at 1.3.0; the repo tracks a Node 8 era snapshot and its issues go unanswered"
+
+summary: >-
+  Node core's StringDecoder, which turns a series of buffers into strings
+  without splitting multi-byte characters apart, packaged for userland and the
+  browser.
+
+why-forked: >-
+  Abandoned upstream while still shipping the abandoned safe-buffer runtime
+  dependency, so nothing was keeping its tree current for the bundlers that pull
+  it in. Forked so Renovate owns the tree; the safe-buffer shim has since been
+  dropped, leaving the package with no runtime dependencies at all.
+
+status: active
+
+used-by:
+  - consumer: "@unabandoned/browserify"
+    purpose: "The browser shim browserify injects for require('string_decoder')."
+
+tags: [string, decoder, node-core-polyfill, browserify]
