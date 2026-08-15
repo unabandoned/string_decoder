@@ -21,54 +21,50 @@
 
 'use strict';
 
-var bufferShim = require('safe-buffer').Buffer;
-// verify that the string decoder works getting 1 byte at a time,
-// the whole buffer at once, and that both match the .toString(enc)
-// result of the entire buffer.
+// Verify that the string decoder works getting one byte at a time and the whole
+// buffer at once, and that both match the .toString(enc) result of the entire
+// buffer.
 
-require('../common');
-var assert = require('assert');
-var SD = require('../../').StringDecoder;
-var encodings = ['base64', 'hex', 'utf8', 'utf16le', 'ucs2'];
+const { test } = require('node:test');
+const assert = require('node:assert');
+const { Buffer } = require('node:buffer');
 
-var bufs = ['☃💩', 'asdf'].map(function (b) {
-  return bufferShim.from(b);
-});
+const { StringDecoder } = require('../../');
 
-// also test just arbitrary bytes from 0-15.
-for (var i = 1; i <= 16; i++) {
-  var bytes = '.'.repeat(i - 1).split('.').map(function (_, j) {
-    return j + 0x78;
-  });
-  bufs.push(bufferShim.from(bytes));
+const encodings = ['base64', 'hex', 'utf8', 'utf16le', 'ucs2'];
+
+const bufs = ['☃💩', 'asdf'].map((b) => Buffer.from(b));
+
+// Also test just arbitrary bytes from 0-15.
+for (let i = 1; i <= 16; i++) {
+  bufs.push(Buffer.from(Array.from({ length: i }, (_, j) => j + 0x78)));
 }
 
-encodings.forEach(testEncoding);
-
-function testEncoding(encoding) {
-  bufs.forEach(function (buf) {
-    testBuf(encoding, buf);
-  });
-}
-
-function testBuf(encoding, buf) {
-  // write one byte at a time.
-  var s = new SD(encoding);
-  var res1 = '';
-  for (var _i = 0; _i < buf.length; _i++) {
-    res1 += s.write(buf.slice(_i, _i + 1));
+function checkBuf(encoding, buf) {
+  // Write one byte at a time.
+  let decoder = new StringDecoder(encoding);
+  let res1 = '';
+  for (let i = 0; i < buf.length; i++) {
+    res1 += decoder.write(buf.subarray(i, i + 1));
   }
-  res1 += s.end();
+  res1 += decoder.end();
 
-  // write the whole buffer at once.
-  var res2 = '';
-  s = new SD(encoding);
-  res2 += s.write(buf);
-  res2 += s.end();
+  // Write the whole buffer at once.
+  decoder = new StringDecoder(encoding);
+  let res2 = decoder.write(buf);
+  res2 += decoder.end();
 
-  // .toString() on the buffer
-  var res3 = buf.toString(encoding);
+  // .toString() on the buffer.
+  const res3 = buf.toString(encoding);
 
   assert.strictEqual(res1, res3, 'one byte at a time should match toString');
   assert.strictEqual(res2, res3, 'all bytes at once should match toString');
+}
+
+for (const encoding of encodings) {
+  test(`${encoding}: chunked and whole-buffer writes match toString`, () => {
+    for (const buf of bufs) {
+      checkBuf(encoding, buf);
+    }
+  });
 }

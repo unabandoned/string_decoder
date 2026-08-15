@@ -21,150 +21,54 @@
 
 'use strict';
 
-var bufferShim = require('safe-buffer').Buffer;
-require('../common');
-var assert = require('assert');
-var inspect = require('util').inspect;
-var StringDecoder = require('../../').StringDecoder;
+const { test } = require('node:test');
+const assert = require('node:assert');
+const { inspect } = require('node:util');
+const { Buffer } = require('node:buffer');
 
-// Test default encoding
-var decoder = new StringDecoder();
-assert.strictEqual(decoder.encoding, 'utf8');
+const { StringDecoder } = require('../../');
 
-// UTF-8
-test('utf-8', bufferShim.from('$', 'utf-8'), '$');
-test('utf-8', bufferShim.from('¢', 'utf-8'), '¢');
-test('utf-8', bufferShim.from('€', 'utf-8'), '€');
-test('utf-8', bufferShim.from('𤭢', 'utf-8'), '𤭢');
-// A mixed ascii and non-ascii string
-// Test stolen from deps/v8/test/cctest/test-strings.cc
-// U+02E4 -> CB A4
-// U+0064 -> 64
-// U+12E4 -> E1 8B A4
-// U+0030 -> 30
-// U+3045 -> E3 81 85
-test('utf-8', bufferShim.from([0xCB, 0xA4, 0x64, 0xE1, 0x8B, 0xA4, 0x30, 0xE3, 0x81, 0x85]), '\u02e4\u0064\u12e4\u0030\u3045');
+// Expected strings are written as \u escapes throughout: most of them are
+// replacement characters, combining marks and lone surrogates, which are
+// invisible or misleading when pasted as literals.
 
-// Some invalid input, known to have caused trouble with chunking
-// in https://github.com/nodejs/node/pull/7310#issuecomment-226445923
-// 00: |00000000 ASCII
-// 41: |01000001 ASCII
-// B8: 10|111000 continuation
-// CC: 110|01100 two-byte head
-// E2: 1110|0010 three-byte head
-// F0: 11110|000 four-byte head
-// F1: 11110|001'another four-byte head
-// FB: 111110|11 "five-byte head", not UTF-8
-test('utf-8', bufferShim.from('C9B5A941', 'hex'), '\u0275\ufffdA');
-test('utf-8', bufferShim.from('E2', 'hex'), '\ufffd');
-test('utf-8', bufferShim.from('E241', 'hex'), '\ufffdA');
-test('utf-8', bufferShim.from('CCCCB8', 'hex'), '\ufffd\u0338');
-test('utf-8', bufferShim.from('F1CCB8', 'hex'), '\ufffd\u0338');
-test('utf-8', bufferShim.from('F0FB00', 'hex'), '\ufffd\ufffd\0');
-test('utf-8', bufferShim.from('E2FBCC01', 'hex'), '\ufffd\ufffd\ufffd\u0001');
-test('utf-8', bufferShim.from('CCB8CDB9', 'hex'), '\u0338\u0379');
-// CESU-8 of U+1D40D
-// UCS-2
-test('ucs2', bufferShim.from('ababc', 'ucs2'), 'ababc');
-
-// UTF-16LE
-test('utf16le', bufferShim.from('3DD84DDC', 'hex'), '\ud83d\udc4d'); // thumbs up
-
-// Additional UTF-8 tests
-decoder = new StringDecoder('utf8');
-assert.strictEqual(decoder.write(bufferShim.from('E1', 'hex')), '');
-assert.strictEqual(decoder.end(), '\ufffd');
-
-decoder = new StringDecoder('utf8');
-assert.strictEqual(decoder.write(bufferShim.from('E18B', 'hex')), '');
-assert.strictEqual(decoder.end(), '\ufffd');
-
-decoder = new StringDecoder('utf8');
-assert.strictEqual(decoder.write(bufferShim.from('\ufffd')), '\ufffd');
-assert.strictEqual(decoder.end(), '');
-
-decoder = new StringDecoder('utf8');
-assert.strictEqual(decoder.write(bufferShim.from('\ufffd\ufffd\ufffd')), '\ufffd\ufffd\ufffd');
-assert.strictEqual(decoder.end(), '');
-
-decoder = new StringDecoder('utf8');
-assert.strictEqual(decoder.write(bufferShim.from('EFBFBDE2', 'hex')), '\ufffd');
-assert.strictEqual(decoder.end(), '\ufffd');
-
-decoder = new StringDecoder('utf8');
-assert.strictEqual(decoder.write(bufferShim.from('F1', 'hex')), '');
-assert.strictEqual(decoder.write(bufferShim.from('41F2', 'hex')), '\ufffdA');
-assert.strictEqual(decoder.end(), '\ufffd');
-
-// Additional utf8Text test
-decoder = new StringDecoder('utf8');
-assert.strictEqual(decoder.text(bufferShim.from([0x41]), 2), '');
-
-// Additional UTF-16LE surrogate pair tests
-decoder = new StringDecoder('utf16le');
-assert.strictEqual(decoder.write(bufferShim.from('3DD8', 'hex')), '');
-assert.strictEqual(decoder.write(bufferShim.from('4D', 'hex')), '');
-assert.strictEqual(decoder.write(bufferShim.from('DC', 'hex')), '\ud83d\udc4d');
-assert.strictEqual(decoder.end(), '');
-
-decoder = new StringDecoder('utf16le');
-assert.strictEqual(decoder.write(bufferShim.from('3DD8', 'hex')), '');
-assert.strictEqual(decoder.end(), '\ud83d');
-
-decoder = new StringDecoder('utf16le');
-assert.strictEqual(decoder.write(bufferShim.from('3DD8', 'hex')), '');
-assert.strictEqual(decoder.write(bufferShim.from('4D', 'hex')), '');
-assert.strictEqual(decoder.end(), '\ud83d');
-
-assert.throws(function () {
-  new StringDecoder(1);
-}, /^Error: Unknown encoding: 1$/);
-
-assert.throws(function () {
-  new StringDecoder('test');
-}, /^Error: Unknown encoding: test$/);
-
-// test verifies that StringDecoder will correctly decode the given input
-// buffer with the given encoding to the expected output. It will attempt all
-// possible ways to write() the input buffer, see writeSequences(). The
-// singleSequence allows for easy debugging of a specific sequence which is
-// useful in case of test failures.
-function test(encoding, input, expected, singleSequence) {
-  var sequences = void 0;
-  if (!singleSequence) {
-    sequences = writeSequences(input.length);
-  } else {
-    sequences = [singleSequence];
-  }
-  var hexNumberRE = /.{2}/g;
-  sequences.forEach(function (sequence) {
-    var decoder = new StringDecoder(encoding);
-    var output = '';
-    sequence.forEach(function (write) {
-      output += decoder.write(input.slice(write[0], write[1]));
-    });
-    output += decoder.end();
-    if (output !== expected) {
-      var message = 'Expected "' + unicodeEscape(expected) + '", ' + ('but got "' + unicodeEscape(output) + '"\n') + ('input: ' + input.toString('hex').match(hexNumberRE) + '\n') + ('Write sequence: ' + JSON.stringify(sequence) + '\n') + ('Full Decoder State: ' + inspect(decoder));
-      assert.fail(output, expected, message);
+// decodes verifies that StringDecoder correctly decodes the given input buffer
+// with the given encoding to the expected output. It attempts every possible
+// way to split the input across successive write() calls, see writeSequences().
+function decodes(encoding, input, expected) {
+  const hexNumberRE = /.{2}/g;
+  for (const sequence of writeSequences(input.length)) {
+    const decoder = new StringDecoder(encoding);
+    let output = '';
+    for (const [start, end] of sequence) {
+      output += decoder.write(input.subarray(start, end));
     }
-  });
+    output += decoder.end();
+
+    assert.strictEqual(
+      output,
+      expected,
+      `Expected "${unicodeEscape(expected)}", but got "${unicodeEscape(output)}"\n` +
+        `input: ${input.toString('hex').match(hexNumberRE)}\n` +
+        `Write sequence: ${JSON.stringify(sequence)}\n` +
+        `Full Decoder State: ${inspect(decoder)}`
+    );
+  }
 }
 
 // unicodeEscape prints the str contents as unicode escape codes.
 function unicodeEscape(str) {
-  var r = '';
-  for (var i = 0; i < str.length; i++) {
+  let r = '';
+  for (let i = 0; i < str.length; i++) {
     r += '\\u' + str.charCodeAt(i).toString(16);
   }
   return r;
 }
 
-// writeSequences returns an array of arrays that describes all possible ways a
-// buffer of the given length could be split up and passed to sequential write
-// calls.
+// writeSequences returns an array of arrays describing all the ways a buffer of
+// the given length could be split up and passed to sequential write calls.
 //
-// e.G. writeSequences(3) will return: [
+// e.g. writeSequences(3) returns: [
 //   [ [ 0, 3 ] ],
 //   [ [ 0, 2 ], [ 2, 3 ] ],
 //   [ [ 0, 1 ], [ 1, 3 ] ],
@@ -177,11 +81,124 @@ function writeSequences(length, start, sequence) {
   } else if (start === length) {
     return [sequence];
   }
-  var sequences = [];
-  for (var end = length; end > start; end--) {
-    var subSequence = sequence.concat([[start, end]]);
-    var subSequences = writeSequences(length, end, subSequence, sequences);
-    sequences = sequences.concat(subSequences);
+  let sequences = [];
+  for (let end = length; end > start; end--) {
+    const subSequence = sequence.concat([[start, end]]);
+    sequences = sequences.concat(writeSequences(length, end, subSequence));
   }
   return sequences;
 }
+
+test('defaults to utf8', () => {
+  assert.strictEqual(new StringDecoder().encoding, 'utf8');
+});
+
+test('decodes utf-8 multi-byte characters', () => {
+  decodes('utf-8', Buffer.from('$', 'utf-8'), '$');
+  decodes('utf-8', Buffer.from('¢', 'utf-8'), '¢');
+  decodes('utf-8', Buffer.from('€', 'utf-8'), '€');
+  decodes('utf-8', Buffer.from('𤭢', 'utf-8'), '𤭢');
+});
+
+test('decodes a mixed ascii and non-ascii string', () => {
+  // Test stolen from deps/v8/test/cctest/test-strings.cc
+  // U+02E4 -> CB A4
+  // U+0064 -> 64
+  // U+12E4 -> E1 8B A4
+  // U+0030 -> 30
+  // U+3045 -> E3 81 85
+  decodes(
+    'utf-8',
+    Buffer.from([0xcb, 0xa4, 0x64, 0xe1, 0x8b, 0xa4, 0x30, 0xe3, 0x81, 0x85]),
+    'ˤdዤ0ぅ'
+  );
+});
+
+test('decodes invalid utf-8 input known to have caused chunking trouble', () => {
+  // https://github.com/nodejs/node/pull/7310#issuecomment-226445923
+  // 00: |00000000 ASCII
+  // 41: |01000001 ASCII
+  // B8: 10|111000 continuation
+  // CC: 110|01100 two-byte head
+  // E2: 1110|0010 three-byte head
+  // F0: 11110|000 four-byte head
+  // F1: 11110|001 another four-byte head
+  // FB: 111110|11 "five-byte head", not UTF-8
+  decodes('utf-8', Buffer.from('C9B5A941', 'hex'), 'ɵ�A');
+  decodes('utf-8', Buffer.from('E2', 'hex'), '�');
+  decodes('utf-8', Buffer.from('E241', 'hex'), '�A');
+  decodes('utf-8', Buffer.from('CCCCB8', 'hex'), '�̸');
+  decodes('utf-8', Buffer.from('F1CCB8', 'hex'), '�̸');
+  decodes('utf-8', Buffer.from('F0FB00', 'hex'), '��\0');
+  decodes('utf-8', Buffer.from('E2FBCC01', 'hex'), '���');
+  decodes('utf-8', Buffer.from('CCB8CDB9', 'hex'), '̸͹');
+});
+
+test('decodes ucs2', () => {
+  decodes('ucs2', Buffer.from('ababc', 'ucs2'), 'ababc');
+});
+
+test('decodes a utf16le surrogate pair', () => {
+  decodes('utf16le', Buffer.from('3DD84DDC', 'hex'), '👍'); // thumbs up
+});
+
+test('emits a replacement character for truncated utf8 input', () => {
+  let decoder = new StringDecoder('utf8');
+  assert.strictEqual(decoder.write(Buffer.from('E1', 'hex')), '');
+  assert.strictEqual(decoder.end(), '�');
+
+  decoder = new StringDecoder('utf8');
+  assert.strictEqual(decoder.write(Buffer.from('E18B', 'hex')), '');
+  assert.strictEqual(decoder.end(), '�');
+
+  decoder = new StringDecoder('utf8');
+  assert.strictEqual(decoder.write(Buffer.from('EFBFBDE2', 'hex')), '�');
+  assert.strictEqual(decoder.end(), '�');
+
+  decoder = new StringDecoder('utf8');
+  assert.strictEqual(decoder.write(Buffer.from('F1', 'hex')), '');
+  assert.strictEqual(decoder.write(Buffer.from('41F2', 'hex')), '�A');
+  assert.strictEqual(decoder.end(), '�');
+});
+
+test('passes through literal replacement characters', () => {
+  let decoder = new StringDecoder('utf8');
+  assert.strictEqual(decoder.write(Buffer.from('�')), '�');
+  assert.strictEqual(decoder.end(), '');
+
+  decoder = new StringDecoder('utf8');
+  assert.strictEqual(
+    decoder.write(Buffer.from('���')),
+    '���'
+  );
+  assert.strictEqual(decoder.end(), '');
+});
+
+test('utf8Text returns empty when the offset is past the end', () => {
+  const decoder = new StringDecoder('utf8');
+  assert.strictEqual(decoder.text(Buffer.from([0x41]), 2), '');
+});
+
+test('buffers a utf16le surrogate pair split across writes', () => {
+  const decoder = new StringDecoder('utf16le');
+  assert.strictEqual(decoder.write(Buffer.from('3DD8', 'hex')), '');
+  assert.strictEqual(decoder.write(Buffer.from('4D', 'hex')), '');
+  assert.strictEqual(decoder.write(Buffer.from('DC', 'hex')), '👍');
+  assert.strictEqual(decoder.end(), '');
+});
+
+test('flushes a dangling utf16le high surrogate on end', () => {
+  let decoder = new StringDecoder('utf16le');
+  assert.strictEqual(decoder.write(Buffer.from('3DD8', 'hex')), '');
+  assert.strictEqual(decoder.end(), '\ud83d');
+
+  decoder = new StringDecoder('utf16le');
+  assert.strictEqual(decoder.write(Buffer.from('3DD8', 'hex')), '');
+  assert.strictEqual(decoder.write(Buffer.from('4D', 'hex')), '');
+  assert.strictEqual(decoder.end(), '\ud83d');
+});
+
+test('throws on an unknown encoding', () => {
+  assert.throws(() => new StringDecoder(1), /^Error: Unknown encoding: 1$/);
+  assert.throws(() => new StringDecoder('test'), /^Error: Unknown encoding: test$/);
+});
