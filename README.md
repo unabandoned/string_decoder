@@ -31,8 +31,9 @@ on a regular cadence. See the
 ## No runtime dependencies
 
 Node core reads `Buffer` straight off the `buffer` module. Upstream's build
-script rewrote that line to `require('safe-buffer')` so the package could run on
-Node < 4.5, where `Buffer.from` and `Buffer.allocUnsafe` did not exist yet.
+script rewrote that line to pull `Buffer` from the `safe-buffer` shim instead, so
+the package could run on Node < 4.5, where `Buffer.from` and
+`Buffer.allocUnsafe` did not exist yet.
 
 This fork requires Node >= 22.12, so that shim was dead weight — the line is
 restored to the core original and `safe-buffer` is gone. The package now has
