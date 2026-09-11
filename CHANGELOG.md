@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.2](https://github.com/unabandoned/string_decoder/compare/string_decoder-v1.4.1...string_decoder-v1.4.2) (2026-09-11)
+
+
+### Dependencies & maintenance
+
+* **deps:** update unabandoned/.github action to v1.0.4 ([#8](https://github.com/unabandoned/string_decoder/issues/8)) ([cf755bd](https://github.com/unabandoned/string_decoder/commit/cf755bdceec9d0b2c9e32af941a0e83b2542785c))
+
 ## [1.4.1](https://github.com/unabandoned/string_decoder/compare/string_decoder-v1.4.0...string_decoder-v1.4.1) (2026-08-28)
 
 
