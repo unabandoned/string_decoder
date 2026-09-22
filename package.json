@@ -1,6 +1,6 @@
 {
   "name": "@unabandoned/string_decoder",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "The string_decoder module from Node core",
   "homepage": "https://github.com/unabandoned/string_decoder#readme",
   "license": "MIT",
