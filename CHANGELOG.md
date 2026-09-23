@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.4](https://github.com/unabandoned/string_decoder/compare/string_decoder-v1.4.3...string_decoder-v1.4.4) (2026-09-23)
+
+
+### Bug Fixes
+
+* stop dev-only commits from cutting releases ([#15](https://github.com/unabandoned/string_decoder/issues/15)) ([c8bd6d8](https://github.com/unabandoned/string_decoder/commit/c8bd6d80b32650af8d46c57469144c29dadda223))
+
 ## [1.4.3](https://github.com/unabandoned/string_decoder/compare/string_decoder-v1.4.2...string_decoder-v1.4.3) (2026-09-22)
 
 
